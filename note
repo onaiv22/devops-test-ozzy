@@ -1,0 +1,226 @@
+🚀 DevOps Dockerization — Full Debugging Journey and Solutions
+🧠 Goal:
+Dockerize a Node.js application, ensuring:
+
+Clean Dockerfile following best practices
+
+Configurations handled properly (default.yaml)
+
+Secure and lightweight production container
+
+App runs successfully inside Docker.
+
+📚 Issues Faced and Solutions
+1. npm Not Found Locally
+Problem:
+
+npm not available on Mac.
+
+Cause:
+
+Node.js was not installed.
+
+Fix:
+
+Installed Node.js via asdf version manager.
+
+Pinned Node.js 23.11.0 inside .tool-versions file.
+
+Commands:
+
+bash
+Copy
+Edit
+brew install asdf
+asdf plugin add nodejs
+asdf install nodejs 23.11.0
+asdf set nodejs 23.11.0
+✅ node and npm available locally.
+
+2. Docker Build Fails — package.json Not Found
+Problem:
+
+Docker build failed because COPY ./app/package*.json ./ couldn't find files.
+
+Cause:
+
+Incorrect Docker build context.
+
+Fix:
+
+Ran Docker build from correct project root where app/ folder is.
+
+Command:
+
+bash
+Copy
+Edit
+docker build -t ozzy -f Dockerfile .
+✅ Docker build proceeded.
+
+3. tsc Not Found Inside Docker Build
+Problem:
+
+npm run build failed because tsc command was missing inside container.
+
+Cause:
+
+Installed production-only dependencies too early with npm install --omit=dev.
+
+Fix:
+
+Installed all dependencies first, built app, then pruned dev dependencies.
+
+Correct Order:
+
+dockerfile
+Copy
+Edit
+RUN npm install
+RUN npm run build
+RUN npm prune --omit=dev
+✅ TypeScript build succeeded.
+
+4. Cannot Find Module @/lib/router
+Problem:
+
+App crashed with module not found error after build.
+
+Cause:
+
+TypeScript path aliases (@/) were not rewritten in compiled JavaScript.
+
+Fix:
+
+Installed tsc-alias and updated package.json:
+
+bash
+Copy
+Edit
+npm install --save-dev tsc-alias
+json
+Copy
+Edit
+"scripts": {
+  "build": "tsc && tsc-alias",
+  "start": "node dist/index.js",
+  "test": "echo \"Error: no test specified\" && exit 1"
+}
+✅ Path aliases resolved correctly.
+
+5. No Configurations Found — port Undefined
+Problem:
+
+App crashed with Cannot read property 'port'.
+
+Cause:
+
+Inside Docker, NODE_CONFIG_DIR was not set.
+
+Wrong file permissions (config/ owned by root).
+
+Fix:
+
+Set NODE_CONFIG_DIR=/home/appuser/config in Dockerfile.
+
+Fixed ownership:
+
+dockerfile
+Copy
+Edit
+COPY --from=builder /app/config ./config
+RUN chown -R appuser:appuser /home/appuser
+ENV NODE_CONFIG_DIR=/home/appuser/config
+✅ Config files loaded properly at runtime.
+
+6. Wrong Docker Port Mapping
+Problem:
+
+App running inside container but unreachable from host.
+
+Cause:
+
+App listened on port 9002 but exposed/mapped 3000 incorrectly.
+
+Fix:
+
+Corrected Docker run command:
+
+bash
+Copy
+Edit
+docker run -p 9002:9002 ozzy
+✅ Curling localhost:9002 returned working HTML.
+
+🛠️ Key Learnings:
+
+Issue	Root Cause	Solution
+Missing npm	Node not installed	Installed Node.js via asdf
+package.json error	Wrong build context	Build from correct root
+tsc missing	DevDeps omitted early	Install all first, prune after
+Path alias errors	Missing alias rewriting	Installed and used tsc-alias
+Config loading issues	Missing NODE_CONFIG_DIR, wrong permissions	Fixed ownership + ENV
+Wrong port mapping	App on 9002, mapped 3000	Corrected port mapping
+📦 Commands Summary:
+bash
+Copy
+Edit
+# Build Docker image
+docker build -t ozzy -f Dockerfile .
+
+# Run Docker container
+docker run -p 9002:9002 ozzy
+
+# (Inside container for debugging)
+docker run -it --entrypoint /bin/sh -e NODE_CONFIG_DIR=/home/appuser/config ozzy
+🔥 Final Working Setup:
+Node.js 23.11.0 via asdf
+
+Clean multi-stage Dockerfile
+
+App running and accessible at http://localhost:9002
+
+.tool-versions file pinning Node.js version
+
+Proper handling of TypeScript aliases
+
+Proper ENV settings inside container
+
+🎯 Final Clean Dockerfile Example:
+dockerfile
+Copy
+Edit
+# Stage 1 - Build
+FROM node:20-slim AS builder
+
+WORKDIR /app
+
+COPY ./app/package*.json ./
+RUN npm install
+COPY ./app .
+RUN npm run build
+RUN npm prune --omit=dev
+
+# Stage 2 - Runtime
+FROM node:20-slim
+
+RUN useradd --user-group --create-home --shell /bin/false appuser
+
+WORKDIR /home/appuser
+
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/config ./config
+
+RUN chown -R appuser:appuser /home/appuser
+
+ENV NODE_CONFIG_DIR=/home/appuser/config
+
+USER appuser
+
+EXPOSE 9002
+
+CMD ["node", "dist/index.js"]
+✅ This full note shows exactly every problem faced, why it happened, how we diagnosed it, and how we fixed it step-by-step.
+✅ It's professional, structured, and matches real-world DevOps work.
